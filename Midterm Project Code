@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Dec 12 21:02:17 2022
+
+@author: joshuataylor
+"""
+
+import os
+import datetime
+import pymongo
+import pprint
+import pandas as pd
+import pymysql
+import mysql.connector
+from sqlalchemy import create_engine
+import matplotlib.pyplot as plt
+import datetime
+
+
+# Sales Data
+# Reading & cleaning the data
+filename = r"/Users/joshuataylor/Desktop/UVA /Fall 2022/DS 2002/Midterm Project 1/sales_data/Sales_April_2019.csv"
+
+sales_data = pd.read_csv( filename )
+  
+sales_data[ 'Order Date' ] = sales_data[ 'Order Date' ].str[ 0 : 8 ]
+    
+sales_data = sales_data.dropna()
+
+sales_data.isna().sum()
+
+
+
+updated_sales = sales_data.to_csv(r'/Users/joshuataylor/Desktop/UVA /Fall 2022/DS 2002/Midterm Project 1\updated_sales.csv')
+
+dim_date = sales_data[ [ 'Order ID' , 'Order Date' ] ]
+
+dim_products = sales_data[ [ 'Order ID' , 'Product' , 'Price Each' ] ]
+
+dim_location_purchased = sales_data[ [ 'Order ID' , 'Purchase Address' ] ]
+
+
+
+
+
+#Connecting Python to MongoDB
+host_name = "DS 2002"
+port = "27017"
+
+
+atlas_cluster_name = "ds2002"
+atlas_default_dbname = "test"
+atlas_user_name = "jooshtay"
+atlas_password = "ClutchMongo181Yuh" # remember to block this out when submitting!!!!!!!!!!!!!!!!!!!!!!
+
+
+conn_str = {
+    "local" : f"mongodb://{host_name}:{port}/",
+    "atlas" : 'mongodb+srv://jooshtay:ClutchMongo181Yuh@ds2002.ho5osez.mongodb.net/test'
+}
+
+client = pymongo.MongoClient( conn_str[ "atlas" ] )
+
+# Creating a new databse
+db_name = "Sales"
+
+db = client[ db_name ]
+client.list_database_names()
+
+collection = "Sales_collection"
+
+Sales_collection = db[ collection ]
+Sales_collection.find_one()
+
+" projections are the columns/fields, while the conditions are the rows/documents"
+
+# The SELECT list -----------------------------------------------
+projection = { "Order_ID": 1, "Product": 1 , "Price_Each" : 1 }
+
+# The WHERE clause ----------------------------------------------
+conditions = { "Price_Each " : { "$gt" : 50 , "$lt" : 120} }
+
+# The ORDER BY clause -------------------------------------------
+orderby = [ ( "Price_Each" , -1 ) ]
+
+for collection in Sales_collection.find( conditions , projection ):
+    print( collection )
+
+
+df = pd.DataFrame( list( db.Sales_collection.find( conditions , projection ) ) )
+df
+
+
+
+
+
+
+
+
+
+
+
+
+# Using Python to interact w/ MySQL
+def get_dataframe(user_id, pwd, host_name, db_name, sql_query):
+    conn_str = f"mysql+pymysql://{user_id}:{pwd}@{host_name}/{db_name}"
+    sqlEngine = create_engine(conn_str, pool_recycle=3600)
+    connection = sqlEngine.connect()
+    dframe = pd.read_sql(sql_query, connection);
+    connection.close()
+    
+    return dframe
+
+
+def set_dataframe(user_id, pwd, host_name, db_name, df, table_name, pk_column, db_operation):
+    conn_str = f"mysql+pymysql://{user_id}:{pwd}@{host_name}/{db_name}"
+    sqlEngine = create_engine(conn_str, pool_recycle=3600)
+    connection = sqlEngine.connect()
+    
+    if db_operation == "insert":
+        df.to_sql(table_name, con=connection, index=False, if_exists='replace')
+        sqlEngine.execute(f"ALTER TABLE {table_name} ADD PRIMARY KEY ({pk_column});")
+            
+    elif db_operation == "update":
+        df.to_sql(table_name, con=connection, index=False, if_exists='append')
+    
+    connection.close()
+
+
+
+
+
+result = db.profiles.create_index([('Order ID', pymongo.ASCENDING)], unique=True)
+sorted(list(db.profiles.index_information()))
+
+print( result )
+# post = {"author": "Mike",
+       # "text": "My first blog post!",
+       # "tags": ["mongodb", "python", "pymongo"],
+       # "date": datetime.datetime.utcnow()
+      # }
+
+# posts = db.posts
+# post_id = posts.insert_one(post).inserted_id
+
+# print("Document ID: ", post_id)
+
+
+
+
+#Connecting Python to MySQL
+
+host_name = "localhost"
+host_ip = "127.0.0.1"
+port = "3306"
+
+user_id = "jooshtay"
+pwd = "theJoosh181__"
+db_name = "Sales"
+
+
+conn = pymysql.connect( host=host_name , user=user_id , password=pwd , database=db_name )
+
+df = pd.read_sql( "SELECT * FROM Sales.dim_products;", conn )
+
+conn.close()
+df.head()
+
+
+conn = pymysql.connect( host=host_name , user=user_id , password=pwd , database=db_name )
+
+descending_price = pd.read_sql("SELECT * FROM Sales.new_fact_table ORDER BY Price_Each DESC;", conn)
+
+conn.close()
+df.head()
+
+# Selecting Products that cost lesss than $100
+
+
+
+# Selecting the most expensive product
+
+conn = pymysql.connect( host=host_name , user=user_id , password=pwd , database=db_name )
+
+most_exp = pd.read_sql( "SELECT Product, Price_Each FROM new_fact_table WHERE Price_Each = ( SELECT MAX( Price_Each ) FROM new_fact_table);" , conn)
+conn.close()
+most_exp.head( 1 )
+
+
+# Selecting the least expensive product
+conn = pymysql.connect( host=host_name , user=user_id , password=pwd , database=db_name )
+
+least_exp = pd.read_sql( "SELECT Product, Price_Each FROM new_fact_table WHERE Price_Each = ( SELECT MIN( Price_Each ) FROM new_fact_table);" , conn)
+conn.close()
+least_exp.head( )
+
+# Finding products that cost more than the average price 
+conn = pymysql.connect( host=host_name , user=user_id , password=pwd , database=db_name )
+
+avg_price = pd.read_sql( "SELECT Product, Price_Each FROM new_fact_table WHERE Price_Each > ( SELECT AVG( Price_Each ) FROM new_fact_table);" , conn)
+conn.close()
+avg_price.head(  )
+
+
+
+
+
+# Querying in SQL using Python
+
+
+
+
+
+
+
